@@ -56,6 +56,9 @@ class Socket extends EventDispatcher
 	public var transport(get_transport, null) : String;
 	public var secure(default, null) : Bool;
 	public var endpoint(default, null) : String;
+    public var query(default, null) : String;
+	
+	private var onceMap:Map<String, Dynamic->Void> = new Map();
 	
 	public function new(uri : String, options : Dynamic = null) 
 	{
@@ -67,6 +70,7 @@ class Socket extends EventDispatcher
 		host = uriParsed.host;
 		port = uriParsed.port;
 		endpoint = uriParsed.path;
+        query = uriParsed.query;
 		_uri = uri;
 		_buffer = new Array<String>();
 		_ack = 0;
@@ -172,6 +176,60 @@ class Socket extends EventDispatcher
 		connectionStatus = SocketConnectionStatus.DISCONNECTED;
 		dispatchEvent(new SocketEvent(SocketEvent.DISCONNECT));
 	}
+	
+	/**
+	 * Convenience method for addEventListener
+	 * @param	event
+	 * @param	callbackFunction
+	 */
+	public function on(event : String, callbackFunction : Dynamic->Void) : Void
+	{
+		addEventListener(event, function(e:SocketEvent) {
+			socketCallback(e, callbackFunction);
+		});
+	}
+	
+	/**
+	 * Convenience method that only listens once to the specified event, then removes itself.
+	 * WARNING: This method will override any previous uncalled listeners for the specified event name.
+	 * @param	event
+	 * @param	callbackFunction
+	 */
+	public function once(event : String, callbackFunction : Dynamic->Void) : Void
+	{
+		onceMap.set(event, callbackFunction);
+		addEventListener(event, onceCallback);
+	}
+	function onceCallback(e : SocketEvent) : Void
+	{
+		var event = e.type;
+		removeEventListener(event, onceCallback);
+		var callbackFunction = onceMap.get(event);
+		onceMap.remove(event);
+		socketCallback(e, callbackFunction);
+	}
+	
+	function socketCallback(e : SocketEvent, callbackFunction : Dynamic->Void) : Void
+	{
+		if (Std.is(e.args, Array)) {
+			var a:Array<Dynamic> = cast e.args;
+			if (a.length == 1) {
+				callbackFunction(a[0]);
+				return;
+			}
+		}
+		callbackFunction(e.args);
+	}
+	
+	/**
+	 * WARNING: Only works for listeners added with once() for now.
+	 * @param	event
+	 */
+	public function removeAllListeners( event : String) : Void {
+		removeEventListener(event, onceCallback);
+		onceMap.remove(event);
+	}
+	
 	
 	public function send(message : Dynamic, ?callbackFunction : Dynamic->Void = null) : Void
 	{

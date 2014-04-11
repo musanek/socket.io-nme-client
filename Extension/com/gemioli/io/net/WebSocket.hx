@@ -34,7 +34,7 @@ extern class WebSocket
 	
 	static function __init__() : Void
 	{
-		haxe.macro.Tools.includeFile("com/gemioli/io/net/WebSocket.js");
+		haxe.macro.Compiler.includeFile("com/gemioli/io/net/WebSocket.js");
 	}
 	
 	public var url(default, null) : String;
@@ -97,7 +97,7 @@ import haxe.io.Eof;
 import flash.net.Socket;
 #else // cpp
 import sys.net.Host;
-import cpp.vm.Thread;
+//import cpp.vm.Thread;
 import haxe.io.Error;
 
 private class Socket extends EventDispatcher
@@ -459,8 +459,16 @@ class WebSocket extends EventDispatcher
 					close(CloseEvent.CLOSE_ABNORMAL, "Bad connection header: " + headers.get("connection"));
 					return;
 				}
-				
-				if (headers.get("sec-websocket-accept") != _expectedKey)
+
+				var requestedKey = headers.get("sec-websocket-accept");
+                #if neko
+                if (requestedKey != null){
+                    requestedKey = requestedKey.substr(0, requestedKey.length-2);
+                    _expectedKey = _expectedKey.substr(0, requestedKey.length);
+                    }
+
+                #end
+				if (requestedKey != _expectedKey)
 				{
 					close(CloseEvent.CLOSE_ABNORMAL, "Key [" + headers.get("sec-websocket-accept") + "] not equals to expected [" + _expectedKey + "].");
 					return;
@@ -637,7 +645,8 @@ class WebSocket extends EventDispatcher
 		for (i in 0...Std.int(shaKey.length / 2))
 			requestBytes.writeByte(Std.parseInt("0x" + shaKey.substr(i * 2, 2)));		
 		_expectedKey = BaseCode64.encodeByteArray(requestBytes);
-		var request = "GET " + _uri.path + " HTTP/1.1\r\n" +
+        var queryPart = if (_uri.query.length > 0) '?'+_uri.query else '';
+		var request = "GET " + _uri.path + queryPart + " HTTP/1.1\r\n" +
 		"Host: " + _uri.host + (_uri.port == "" ? "" : (":" + _uri.port)) + "\r\n" +
 		"Upgrade: websocket\r\n" +
 		"Connection: Upgrade\r\n" + 
